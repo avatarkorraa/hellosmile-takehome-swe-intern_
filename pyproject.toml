@@ -1,0 +1,16 @@
+[project]
+name = "hellosmile-takehome-swe-intern"
+version = "0.1.0"
+description = "HelloSmile take-home assignment (Software Engineer Intern)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.128.1",
+    "uvicorn[standard]>=0.40.0",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.12.0",
+    "livekit-api>=1.2.1",
+    "livekit-agents[silero]>=1.3.12",
+    "livekit-plugins-noise-cancellation>=0.2.5",
+    "pytest>=8.0.0",
+]
