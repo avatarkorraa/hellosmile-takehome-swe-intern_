@@ -159,17 +159,17 @@ Non sono suggerimenti:
 1. Perché questo approccio per i permessi staff/patient, invece di
    un'alternativa (ruoli generici, tabella permessi, ...)?
 
-   _(risposta)_
+Perchè per il contesto del task aggiungere ulteriore complessità tramite una tabella dei permessi e ruoli generici va contro la semplicità richiesta dal task stesso all'interno della traccia, non serve complicare la struttura del codice e la logica implementativa in quanto con la divisione degli accessi tra Staff e Utente normale si riesce già a gestire le autorizzazioni e gli accessi.
 
 2. Due richieste concorrenti sulla stessa room: il tuo codice lo gestisce?
    Come, o perché no?
 
-   _(risposta)_
+No, non è implementato un vero controllo di concorrenza sulla room. Non sono presenti database o strutture condivise all'interno del codice che necessitano del controllo contemporaneo della risorsa, se due richieste avvengono contemporaneamente sulla stessa room semplicemente avviene la verifica del token. L'architettura attuale non lo richiede.
 
 3. Ci sono componenti che potresti togliere mantenendo la funzionalità? Se
    sì perché li hai tenuti, se no perché è già minimale?
 
-   _(risposta)_
+No, l'architettura del task è già minimale in quanto ci sono solamente i componenti essenziali per lo svolgimento dello stesso, l'agente, la creazione del token con relativa verifica, la gestione dei ruoli e dell'accesso.
 
 ## Bonus extra
 
