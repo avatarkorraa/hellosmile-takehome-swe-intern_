@@ -34,7 +34,6 @@ SECRET_KEY = b"hellosmile-take-home-test-secret"
 def _sign(payload_b64: bytes) -> str:
     return hmac.new(SECRET_KEY, payload_b64, hashlib.sha256).hexdigest()
 
-
 def create_test_token(sub: str, role: str, patient_id: Optional[str] = None) -> str:
     """Create a fake auth token with claims {sub, role[, patient_id]}."""
     if role not in ("staff", "patient"):
@@ -48,6 +47,26 @@ def create_test_token(sub: str, role: str, patient_id: Optional[str] = None) -> 
     signature = _sign(payload_b64)
     return f"{payload_b64.decode()}.{signature}"
 
+
+def verify_test_token(token: str) -> dict[str, str]:
+    try:
+        payload_b64, signature = token.split(".", 1)
+
+        expected_signature = _sign(payload_b64.encode())
+
+        if not hmac.compare_digest(signature, expected_signature):
+            raise ValueError("invalid signature")
+
+        payload = base64.urlsafe_b64decode(payload_b64)
+        claims = json.loads(payload)
+
+        if claims.get("role") not in ("staff", "patient"):
+            raise ValueError("invalid role")
+
+        return claims
+
+    except Exception as exc:
+        raise ValueError("invalid token") from exc
 
 if __name__ == "__main__":
     # Handy for minting tokens to poke the API manually, e.g.:

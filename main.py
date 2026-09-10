@@ -7,12 +7,15 @@ Runs as-is with `uvicorn main:app --reload`, but `/token` and
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from utils.auth import verify_test_token
+
+from fastapi import FastAPI, Header
 from pydantic import BaseModel
 
 from bonus import router as bonus_router
 from models.context import Context
 from utils.livekit_tokens import generate_livekit_token
+from fastapi import Depends, HTTPException
 
 app = FastAPI(title="HelloSmile Take-Home API")
 app.include_router(bonus_router, prefix="/bonus")
@@ -52,14 +55,34 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def get_current_user(authorization: str | None = Header(default=None),) -> dict[str, str]:
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized",)
+
+    token = authorization[len("Bearer "):]
+
+    try:
+        return verify_test_token(token)
+    except ValueError:
+        raise HTTPException(status_code=401,detail="Unauthorized",)
+
 @app.post("/token")
-def issue_token(payload: TokenRequest) -> dict[str, str]:
+def issue_token(payload: TokenRequest, user: dict[str, str] = Depends(get_current_user)) -> dict[str, str]:
     """Issue a real LiveKit token for `payload.room` / `payload.identity`.
 
     TODO(candidate): there is no auth check here at all right now — anyone
     can request a token for any room and any identity. See Task 1 in the
     README.
     """
+
+    # I pazienti possono accedere solo alla propria stanza
+    if user["role"] == "patient":
+        patient_id = user.get("patient_id")
+
+        if payload.room != f"patient-{patient_id}":
+            raise HTTPException(status_code=403, detail="Forbidden")
+
     token = generate_livekit_token(room=payload.room, identity=payload.identity)
     return {"room": payload.room, "identity": payload.identity, "token": token}
 
@@ -96,7 +119,6 @@ def register_call(call: CallReport) -> dict[str, object]:
     record["id"] = len(CALLS) + 1
     CALLS.append(record)
     return record
-
 
 @app.get("/calls")
 def list_calls() -> list[dict[str, object]]:
