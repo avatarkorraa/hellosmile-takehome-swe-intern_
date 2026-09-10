@@ -1,3 +1,9 @@
+import asyncio
+import json
+import time
+
+import httpx
+
 from config import settings
 from livekit import agents
 from livekit.agents import Agent, AgentSession, inference, room_io
@@ -5,21 +11,17 @@ from livekit.plugins import noise_cancellation, silero
 
 
 class Assistant(Agent):
-    def __init__(self) -> None:
-        # TODO(candidate, Task 3): this prompt is deliberately mediocre —
-        # generic tone, no length constraint, nothing about what's in/out
-        # of scope, nothing about dental emergencies. Rewrite it for
-        # HelloSmile. You'll likely also want to use the clinic context
-        # fetched below (opening hours, services, contact info) instead of
-        # hardcoding anything here.
+    def __init__(self, clinic_context: str) -> None:
         super().__init__(
-            instructions="""You are a helpful voice AI assistant.
+            instructions=f"""You are a helpful voice AI assistant.
             You eagerly assist users with their questions by providing information from your extensive knowledge.
             Your responses are concise, to the point, and without any complex formatting or punctuation including emojis, asterisks, or other symbols.
             You are curious, friendly, and have a sense of humor.
 
             You are the assistant of a dental clinic called HelloSmile. You answer questions about the knowledge provided in the context.
             Here is the context you can use to answer questions:
+
+            {clinic_context}
             """,
         )
 
@@ -31,11 +33,18 @@ class Assistant(Agent):
 
 
 async def entrypoint(ctx: agents.JobContext):
-    # TODO(candidate, Task 2): fetch the current clinic context from the API
-    # service (GET {settings.API_BASE_URL}/context) and inject it into
-    # Assistant's instructions before starting the session, so the agent
-    # answers using the *current* opening hours / services / contact info
-    # rather than whatever was hardcoded above.
+    # Fetch the current clinic context from the API.
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{settings.API_BASE_URL}/context"
+        )
+        response.raise_for_status()
+
+        clinic_context = json.dumps(
+            response.json(),
+            ensure_ascii=False,
+            indent=2,
+        )
 
     session = AgentSession(
         stt="deepgram/nova-2:it",
@@ -48,9 +57,18 @@ async def entrypoint(ctx: agents.JobContext):
         vad=silero.VAD.load(),
     )
 
+    start_time = time.monotonic()
+
+    # Wait until the session closes.
+    session_closed = asyncio.Event()
+
+    @session.on("close")
+    def on_close(event):
+        session_closed.set()
+
     await session.start(
         room=ctx.room,
-        agent=Assistant(),
+        agent=Assistant(clinic_context),
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
                 noise_cancellation=noise_cancellation.BVC(),
@@ -58,19 +76,31 @@ async def entrypoint(ctx: agents.JobContext):
         ),
     )
 
-    # TODO(candidate, Task 2): when the session ends, POST the call details
-    # (transcript, duration) to {settings.API_BASE_URL}/calls so it shows
-    # up for staff. `session.history` has the conversation transcript.
-    #
-    # Note: `session.start()` returns as soon as the session begins, not
-    # when it ends — you'll need to wait for the actual close before
-    # reading transcript/duration (see `AgentSession`'s "close" event).
+    await session_closed.wait()
+
+    duration = time.monotonic() - start_time
+
+    # Report the completed call to the API.
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{settings.API_BASE_URL}/calls",
+            json={
+                "transcript": session.history,
+                "duration": duration,
+            },
+        )
+        response.raise_for_status()
 
 
 if __name__ == "__main__":
-    if not all([settings.LIVEKIT_API_KEY, settings.LIVEKIT_API_SECRET, settings.LIVEKIT_URL]):
+    if not all([
+        settings.LIVEKIT_API_KEY,
+        settings.LIVEKIT_API_SECRET,
+        settings.LIVEKIT_URL,
+    ]):
         raise ValueError(
-            "LIVEKIT_API_KEY, LIVEKIT_API_SECRET, and LIVEKIT_URL must be set in the environment variables."
+            "LIVEKIT_API_KEY, LIVEKIT_API_SECRET, and LIVEKIT_URL "
+            "must be set in the environment variables."
         )
 
     agents.cli.run_app(
