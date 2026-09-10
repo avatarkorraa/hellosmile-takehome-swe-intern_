@@ -87,8 +87,15 @@ def issue_token(payload: TokenRequest, user: dict[str, str] = Depends(get_curren
     return {"room": payload.room, "identity": payload.identity, "token": token}
 
 
+def require_staff(user: dict[str, str] = Depends(get_current_user),) -> dict[str, str]:
+
+    if user["role"] != "staff":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    return user
+
 @app.get("/rooms/active")
-def rooms_active() -> list[dict[str, str]]:
+def rooms_active( _: dict[str, str] = Depends(require_staff),) -> list[dict[str, str]]:
     """List active rooms.
 
     TODO(candidate): this is public right now. See Task 1 in the README.
@@ -102,7 +109,7 @@ def get_context() -> Context:
 
 
 @app.patch("/context")
-def update_context(patch: dict) -> Context:
+def update_context(patch: dict, _: dict[str, str] = Depends(require_staff),) -> Context:
     """Update the clinic context (opening hours, services, ...).
 
     TODO(candidate): only staff should be able to call this. See Task 1.
